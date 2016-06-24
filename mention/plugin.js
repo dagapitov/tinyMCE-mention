@@ -3,7 +3,7 @@
 (function (tinymce) {
     'use strict';
 
-    var jsHelper = {
+    var jsH = {
         extend: function () {
             for (var i = 1; i < arguments.length; i++)
                 for (var key in arguments[i])
@@ -42,14 +42,14 @@
 
                     // Traverse everything else, except comment nodes
                 } else if (elem.nodeType !== 8) {
-                    ret += jsHelper.getText(elem.childNodes);
+                    ret += jsH.getText(elem.childNodes);
                 }
             }
 
             return ret;
         },
         isFunction: function (obj) {
-            return toString.call(obj) === "[object Function]";
+            return typeof obj === 'function';
         },
         offset: function (el) {
             var rect = el.getBoundingClientRect();
@@ -149,10 +149,18 @@
         },
         closest: function (el, selector) {
 
-            while (el.matches && !el.matches(selector)) {
-                el = el.parentNode
-            };
-            return el.matches ? el : null;
+            if (el.matches) {
+                while (el.matches && !el.matches(selector)) {
+                    el = el.parentNode
+                };
+            } else if (el.msMatchesSelector) {
+                while (el.msMatchesSelector && !el.msMatchesSelector(selector)) {
+                    el = el.parentNode
+                };
+            } else {
+                el = null;
+            }
+            return el;
 
         },
         isEmptyObject: function (obj) {
@@ -164,7 +172,7 @@
     var AutoComplete = function (ed, options) {
         this.editor = ed;
 
-        this.options = jsHelper.extend({}, {
+        this.options = jsH.extend({}, {
             source: [],
             delay: 500,
             queryBy: 'name',
@@ -173,7 +181,7 @@
 
         this.matcher = this.options.matcher || this.matcher;
         //  this.renderDropdown = this.options.renderDropdown || this.renderDropdown;   //TODO
-        //  this.render = this.options.render || this.render;                           //TODO
+        // this.render = this.options.render || this.render;                           //TODO
         this.insert = this.options.insert || this.insert;
         this.highlighter = this.options.highlighter || this.highlighter;
 
@@ -250,7 +258,7 @@
                 case 13:
                     var item = (this.dropdown !== undefined) ? this.dropdown.querySelectorAll('li.active') : [];
                     if (item.length) {
-                        this.select(jsHelper.data(item[0], this.options.queryBy));
+                        this.select(jsH.data(item[0], this.options.queryBy));
                         this.cleanUp(false);
                     } else {
                         this.cleanUp(true);
@@ -298,8 +306,12 @@
         },
 
         rteClicked: function (e) {
-            let target = e.target;
-            let id = target.parentNode.getAttribute("id");
+            let target = e.target,
+                id;
+
+            if (target.parentNode && target.parentNode.getAttribute) {
+                id = target.parentNode.getAttribute("id");
+            }
 
             if (this.hasFocus && id !== 'autocomplete-searchtext') {
                 this.cleanUp(true);
@@ -315,7 +327,7 @@
 
         lookup: function () {
             let editorBody = this.editor.getBody().querySelector('#autocomplete-searchtext');
-            this.query = jsHelper.trim(editorBody.innerText).replace('\ufeff', '');
+            this.query = jsH.trim(editorBody.innerText).replace('\ufeff', '');
 
             if (this.dropdown === undefined) {
                 this.show();
@@ -324,7 +336,7 @@
             clearTimeout(this.searchTimeout);
             this.searchTimeout = setTimeout(function () {
                 // Added delimiter parameter as last argument for backwards compatibility.
-                var items = jsHelper.isFunction(this.options.source) ? this.options.source(this.query, this.process.bind(this), this.options.delimiter) : this.options.source;
+                var items = jsH.isFunction(this.options.source) ? this.options.source(this.query, this.process.bind(this), this.options.delimiter) : this.options.source;
                 if (items) {
                     this.process(items);
                 }
@@ -363,7 +375,7 @@
         show: function () {
             var offset = this.editor.inline ? this.offsetInline() : this.offset();
 
-            this.dropdown = this.renderDropdown();
+            this.dropdown = this.createDropdown();
             this.dropdown.style.top = offset.top + "px";
             this.dropdown.style.left = offset.left + "px";
 
@@ -379,7 +391,7 @@
 
             var _this = this,
                 result = [],
-                items = jsHelper.grep(data, function (item) {
+                items = jsH.grep(data, function (item) {
                     return _this.matcher(item);
                 });
 
@@ -389,16 +401,17 @@
 
             this.dropdown.innerHTML = '';
 
-            items.forEach(function (item) {
-                let li = _this.render(item);
-                li.innerHTML = li.innerHTML.replace(li.innerText, _this.highlighter(li.innerText));
+            for (let i = 0; i < items.length; i++) {
+                let item = items[i];
+                let li = this.createLi(item);
+                li.innerHTML = li.innerHTML.replace(li.innerText, this.highlighter(li.innerText));
 
-                jsHelper.each(item, function (key, val) {
+                jsH.each(item, function (key, val) {
                     li.setAttribute('data-' + key, val);
                 });
 
-                _this.dropdown.appendChild(li);
-            });
+                this.dropdown.appendChild(li);
+            }
 
             if (this.dropdown.childNodes.length > 0) {
                 this.dropdown.style.display = '';
@@ -406,11 +419,21 @@
 
             } else {
                 this.dropdown.style.display = 'none';
-
             }
         },
 
+
         renderDropdown: function () {
+            return '<ul class="rte-autocomplete dropdown-menu"><li class="loading"></li></ul>';
+        },
+
+        render: function (item) {
+            return '<li>' +
+                        '<a href="javascript:;"><span>' + item[this.options.queryBy] + '</span></a>' +
+                    '</li>';
+        },
+
+        createDropdown: function () {
             let li = document.createElement('li');
             li.className = "loading";
             let ul = document.createElement('ul');
@@ -420,7 +443,7 @@
             return ul;
         },
 
-        render: function (item) {
+        createLi: function (item) {
             let li = document.createElement('li');
             let a = document.createElement('a');
             a.setAttribute('href', "javascript:;");
@@ -434,9 +457,9 @@
         },
 
         autoCompleteClick: function (e) {
-            let item = jsHelper.data(jsHelper.closest(e.target, 'li'), this.options.queryBy);
+            let item = jsH.data(jsH.closest(e.target, 'li'), this.options.queryBy);
 
-            if (!jsHelper.isEmptyObject(item)) {
+            if (!jsH.isEmptyObject(item)) {
                 this.select(item);
                 this.cleanUp(false);
             }
@@ -466,11 +489,12 @@
                 index = (currentIndex === length - 1) ? 0 : ++currentIndex;
             }
 
-            this.dropdown.querySelectorAll('li').forEach(function (item) {
-                jsHelper.removeClass(item, 'active');
-            });
+            var liArray = this.dropdown.querySelectorAll('li');
+            for (let i = 0; i < liArray.length; i++) {
+                jsH.removeClass(liArray[i], 'active');
+            }
 
-            jsHelper.addClass(items[index], 'active');
+            jsH.addClass(items[index], 'active');
         },
 
         select: function (item) {
@@ -502,7 +526,7 @@
                 let p = document.createElement('p');
                 p.innerText = this.options.delimiter + text;
                 let replacement = p.firstChild;
-                let focus = jsHelper.offset(this.editor.selection.getNode()).top === (jsHelper.offset(selection).top + ((selection.offsetHeigh - window.getComputedStyle(selection).getPropertyValue("height")) / 2));
+                let focus = jsH.offset(this.editor.selection.getNode()).top === (jsH.offset(selection).top + ((selection.offsetHeigh - window.getComputedStyle(selection).getPropertyValue("height")) / 2));
 
                 this.editor.dom.replace(replacement, selection);
 
@@ -514,21 +538,21 @@
         },
 
         offset: function () {
-            let rtePosition = jsHelper.offset(this.editor.getContainer()),
-                contentAreaPosition = jsHelper.position(this.editor.getContentAreaContainer()),
-                nodePosition = jsHelper.position(this.editor.dom.select('span#autocomplete')[0]);
+            let rtePosition = jsH.offset(this.editor.getContainer()),
+                contentAreaPosition = jsH.position(this.editor.getContentAreaContainer()),
+                nodePosition = jsH.position(this.editor.dom.select('span#autocomplete')[0]);
 
             return {
-                top: rtePosition.top + contentAreaPosition.top + nodePosition.top + jsHelper.innerHeight(this.editor.selection.getNode()) - this.editor.getDoc().body.scrollTop + 5,
+                top: rtePosition.top + contentAreaPosition.top + nodePosition.top + jsH.innerHeight(this.editor.selection.getNode()) - this.editor.getDoc().body.scrollTop + 5,
                 left: rtePosition.left + contentAreaPosition.left + nodePosition.left
             };
         },
 
         offsetInline: function () {
-            var nodePosition = jsHelper.offset(this.editor.dom.select('span#autocomplete')[0]);
+            var nodePosition = jsH.offset(this.editor.dom.select('span#autocomplete')[0]);
 
             return {
-                top: nodePosition.top + jsHelper.innerHeight(this.editor.selection.getNode()[0]) + 5, //TODO
+                top: nodePosition.top + jsH.innerHeight(this.editor.selection.getNode()[0]) + 5, //TODO
                 left: nodePosition.left
             };
         }
@@ -544,23 +568,23 @@
 
             // If the delimiter is undefined set default value to ['@'].
             // If the delimiter is a string value convert it to an array. (backwards compatibility)
-            autoCompleteData.delimiter = (autoCompleteData.delimiter !== undefined) ? !jsHelper.isArray(autoCompleteData.delimiter) ? [autoCompleteData.delimiter] : autoCompleteData.delimiter : ['@'];
+            autoCompleteData.delimiter = (autoCompleteData.delimiter !== undefined) ? !jsH.isArray(autoCompleteData.delimiter) ? [autoCompleteData.delimiter] : autoCompleteData.delimiter : ['@'];
 
             function prevCharIsSpace() {
                 var start = ed.selection.getRng(true).startOffset,
                       text = ed.selection.getRng(true).startContainer.data || '',
                       charachter = text.substr(start - 1, 1);
 
-                return (!!jsHelper.trim(charachter).length) ? false : true;
+                return (!!jsH.trim(charachter).length) ? false : true;
             }
 
             ed.on('keypress', function (e) {
-                var delimiterIndex = jsHelper.inArray(String.fromCharCode(e.which || e.keyCode), autoCompleteData.delimiter);
+                var delimiterIndex = jsH.inArray(String.fromCharCode(e.which || e.keyCode), autoCompleteData.delimiter);
                 if (delimiterIndex > -1 && prevCharIsSpace()) {
                     if (autoComplete === undefined || (autoComplete.hasFocus !== undefined && !autoComplete.hasFocus)) {
                         e.preventDefault();
                         // Clone options object and set the used delimiter.
-                        autoComplete = new AutoComplete(ed, jsHelper.extend({}, autoCompleteData, { delimiter: autoCompleteData.delimiter[delimiterIndex] }));
+                        autoComplete = new AutoComplete(ed, jsH.extend({}, autoCompleteData, { delimiter: autoCompleteData.delimiter[delimiterIndex] }));
                     }
                 }
             });

@@ -1,9 +1,13 @@
-/*global tinymce, jQuery */
+/*global tinymce */
 
 (function (tinymce) {
     'use strict';
 
-    var jsH = {
+    var noJQuery = function () { };
+
+    noJQuery.prototype = {
+
+        constructor: noJQuery,
         isIE: function () {
             var uA = navigator.userAgent;
             return (uA.indexOf('Trident') != -1 && uA.indexOf('rv:11') != -1) || (uA.indexOf('Trident') != -1 && uA.indexOf('MSIE') != -1);
@@ -24,8 +28,6 @@
         grep: function (elems, callback, inv) {
             var ret = [];
 
-            // Go through the array, only saving the items
-            // that pass the validator function
             for (var i = 0, length = elems.length; i < length; i++) {
                 if (!inv !== !callback(elems[i], i)) {
                     ret.push(elems[i]);
@@ -39,12 +41,8 @@
 
             for (var i = 0; elems[i]; i++) {
                 elem = elems[i];
-
-                // Get the text from text nodes and CDATA nodes
                 if (elem.nodeType === 3 || elem.nodeType === 4) {
                     ret += elem.nodeValue;
-
-                    // Traverse everything else, except comment nodes
                 } else if (elem.nodeType !== 8) {
                     ret += jsH.getText(elem.childNodes);
                 }
@@ -65,8 +63,8 @@
 
         },
         innerHeight: function (el) {
-            let style = window.getComputedStyle(el, null);
-            let height = style.getPropertyValue("height");
+            var style = window.getComputedStyle(el, null);
+            var height = style.getPropertyValue("height");
             if (height === 'auto') {
                 height = el.offsetHeight;
             }
@@ -80,8 +78,8 @@
         },
         each: function (obj, callback, args) {
             var value, i = 0,
-                length = obj.length,
-                isArray = Array.isArray(obj);
+				length = obj.length,
+				isArray = Array.isArray(obj);
 
             if (args) {
                 if (isArray) {
@@ -101,8 +99,6 @@
                         }
                     }
                 }
-
-                // A special, fast, case for the most common use of each
             } else {
                 if (isArray) {
                     for (; i < length; i++) {
@@ -141,25 +137,30 @@
             }
         },
         data: function (item, attr) {
-            let value = item.getAttribute('data-' + attr);
-            let o = {};
+            var value = item.getAttribute('data-' + attr);
+            var o = {};
             o[attr] = value;
             return o;
         },
         getAllDataAttributes: function (el) {
-            return Array.prototype.filter.call(el.attributes, function (at) {
-                return /^data-/.test(at.name);
+            var o = {};
+            Array.prototype.slice.call(el.attributes).forEach(function (at) {
+                if (/^data-/.test(at.name)) {
+                    o[at.name.replace(/^data-/, "")] = at.value;
+                }
             });
+            return o;
         },
         closest: function (el, selector) {
+
             if (el.matches) {
                 while (el.matches && !el.matches(selector)) {
                     el = el.parentNode
-                };
+                }
             } else if (el.msMatchesSelector) {
                 while (el.msMatchesSelector && !el.msMatchesSelector(selector)) {
                     el = el.parentNode
-                };
+                }
             } else {
                 el = null;
             }
@@ -170,12 +171,14 @@
             return Object.keys(obj).length === 0 && obj.constructor === Object;
 
         }
-    }
+    };
 
     var AutoComplete = function (ed, options) {
+        this.jsH = new noJQuery();
+
         this.editor = ed;
 
-        this.options = jsH.extend({}, {
+        this.options = this.jsH.extend({}, {
             source: [],
             delay: 500,
             queryBy: 'name',
@@ -183,8 +186,8 @@
         }, options);
 
         this.matcher = this.options.matcher || this.matcher;
-        //  this.renderDropdown = this.options.renderDropdown || this.renderDropdown;   //TODO
-        // this.render = this.options.render || this.render;                           //TODO
+        this.renderDropdown = this.options.renderDropdown || this.renderDropdown;
+        this.render = this.options.render || this.render;
         this.insert = this.options.insert || this.insert;
         this.highlighter = this.options.highlighter || this.highlighter;
 
@@ -202,9 +205,9 @@
 
         renderInput: function () {
             var rawHtml = '<span id="autocomplete">' +
-                                '<span id="autocomplete-delimiter">' + this.options.delimiter + '</span>' +
-                                '<span id="autocomplete-searchtext"><span class="dummy">\uFEFF</span></span>' +
-                            '</span>';
+				'<span id="autocomplete-delimiter">' + this.options.delimiter + '</span>' +
+				'<span id="autocomplete-searchtext"><span class="dummy">\uFEFF</span></span>' +
+				'</span>';
 
             this.editor.execCommand('mceInsertContent', false, rawHtml);
             this.editor.focus();
@@ -217,7 +220,7 @@
             this.editor.on('keydown', this.editorKeyDownProxy = this.rteKeyDown.bind(this), true);
             this.editor.on('click', this.editorClickProxy = this.rteClicked.bind(this));
 
-            document.querySelector('body').addEventListener('click', this.bodyClickProxy = this.rteLostFocus.bind(this));
+            document.body.addEventListener('click', this.bodyClickProxy = this.rteLostFocus.bind(this));
 
             this.editor.getWin().addEventListener('scroll', this.rteScroll = function () { this.cleanUp(true); }.bind(this));
         },
@@ -227,7 +230,7 @@
             this.editor.off('keydown', this.editorKeyDownProxy);
             this.editor.off('click', this.editorClickProxy);
 
-            document.querySelector('body').removeEventListener('click', this.bodyClickProxy);
+            document.body.removeEventListener('click', this.bodyClickProxy);
 
             this.editor.getWin().removeEventListener('scroll', this.rteScroll);
         },
@@ -261,7 +264,7 @@
                 case 13:
                     var item = (this.dropdown !== undefined) ? this.dropdown.querySelectorAll('li.active') : [];
                     if (item.length) {
-                        this.select(jsH.data(item[0], this.options.queryBy));
+                        this.select(this.jsH.getAllDataAttributes(item[0]));
                         this.cleanUp(false);
                     } else {
                         this.cleanUp(true);
@@ -309,8 +312,8 @@
         },
 
         rteClicked: function (e) {
-            let target = e.target,
-                id;
+            var target = e.target,
+				id;
 
             if (target.parentNode && target.parentNode.getAttribute) {
                 id = target.parentNode.getAttribute("id");
@@ -329,8 +332,8 @@
         },
 
         lookup: function () {
-            let editorBody = this.editor.getBody().querySelector('#autocomplete-searchtext');
-            this.query = jsH.trim(editorBody.innerText).replace('\ufeff', '');
+            var editorBody = this.editor.getBody().querySelector('#autocomplete-searchtext');
+            this.query = this.jsH.trim(editorBody.innerText).replace('\ufeff', '');
 
             if (this.dropdown === undefined) {
                 this.show();
@@ -339,7 +342,7 @@
             clearTimeout(this.searchTimeout);
             this.searchTimeout = setTimeout(function () {
                 // Added delimiter parameter as last argument for backwards compatibility.
-                var items = jsH.isFunction(this.options.source) ? this.options.source(this.query, this.process.bind(this), this.options.delimiter) : this.options.source;
+                var items = this.jsH.isFunction(this.options.source) ? this.options.source(this.query, this.process.bind(this), this.options.delimiter) : this.options.source;
                 if (items) {
                     this.process(items);
                 }
@@ -352,9 +355,9 @@
 
         sorter: function (items) {
             var beginswith = [],
-                caseSensitive = [],
-                caseInsensitive = [],
-                item;
+				caseSensitive = [],
+				caseInsensitive = [],
+				item;
 
             while ((item = items.shift()) !== undefined) {
                 if (!item[this.options.queryBy].toLowerCase().indexOf(this.query.toLowerCase())) {
@@ -378,11 +381,13 @@
         show: function () {
             var offset = this.editor.inline ? this.offsetInline() : this.offset();
 
-            this.dropdown = this.createDropdown();
+            var div = document.createElement("div");
+            div.innerHTML = this.renderDropdown();
+            this.dropdown = div.firstChild;
             this.dropdown.style.top = offset.top + "px";
             this.dropdown.style.left = offset.left + "px";
 
-            document.querySelector('body').appendChild(this.dropdown);
+            document.body.appendChild(this.dropdown);
 
             this.dropdown.addEventListener('click', this.autoCompleteClick.bind(this));
         },
@@ -393,10 +398,10 @@
             }
 
             var _this = this,
-                result = [],
-                items = jsH.grep(data, function (item) {
-                    return _this.matcher(item);
-                });
+				result = [],
+				items = this.jsH.grep(data, function (item) {
+				    return _this.matcher(item);
+				});
 
             items = _this.sorter(items);
 
@@ -404,12 +409,16 @@
 
             this.dropdown.innerHTML = '';
 
-            for (let i = 0; i < items.length; i++) {
-                let item = items[i];
-                let li = this.createLi(item);
+            for (var i = 0; i < items.length; i++) {
+                var item = items[i];
+
+                var div = document.createElement("div");
+                div.innerHTML = this.render(item);
+                var li = div.firstChild;
+
                 li.innerHTML = li.innerHTML.replace(li.innerText, this.highlighter(li.innerText));
 
-                jsH.each(item, function (key, val) {
+                this.jsH.each(item, function (key, val) {
                     li.setAttribute('data-' + key, val);
                 });
 
@@ -417,7 +426,7 @@
             }
 
             if (this.dropdown.childNodes.length > 0) {
-                this.dropdown.style.display = '';
+                this.dropdown.style.display = 'block';
 
 
             } else {
@@ -427,42 +436,19 @@
 
 
         renderDropdown: function () {
-            return '<ul class="rte-autocomplete dropdown-menu"><li class="loading"></li></ul>';
+            return '<ul class="rte-autocomplete mce-mention dropdown-menu"><li class="loading"></li></ul>'; //need to add a class starting with "mce-" to not make the inline editor disappear
         },
 
         render: function (item) {
             return '<li>' +
-                        '<a href="javascript:;"><span>' + item[this.options.queryBy] + '</span></a>' +
-                    '</li>';
-        },
-
-        createDropdown: function () {
-            let li = document.createElement('li');
-            li.className = "loading";
-            let ul = document.createElement('ul');
-            ul.setAttribute('class', "rte-autocomplete dropdown-menu");
-            ul.appendChild(li);
-
-            return ul;
-        },
-
-        createLi: function (item) {
-            let li = document.createElement('li');
-            let a = document.createElement('a');
-            a.setAttribute('href', "javascript:;");
-            let span = document.createElement('span');
-            span.innerText = item[this.options.queryBy];
-
-            a.appendChild(span);
-            li.appendChild(a);
-
-            return li;
+				'<a href="javascript:;"><span>' + item[this.options.queryBy] + '</span></a>' +
+				'</li>';
         },
 
         autoCompleteClick: function (e) {
-            let item = jsH.data(jsH.closest(e.target, 'li'), this.options.queryBy);
+            var item = this.jsH.getAllDataAttributes(this.jsH.closest(e.target, 'li'));
 
-            if (!jsH.isEmptyObject(item)) {
+            if (!this.jsH.isEmptyObject(item)) {
                 this.select(item);
                 this.cleanUp(false);
             }
@@ -478,11 +464,11 @@
             this.highlightResult(1);
         },
         highlightResult: function (direction) {
-            let activeLi = this.dropdown.querySelector('li.active'),
-                items = Array.prototype.slice.call(this.dropdown.children),
-                length = items.length,
-                currentIndex = 0,
-                index = 0;
+            var activeLi = this.dropdown.querySelector('li.active'),
+				items = Array.prototype.slice.call(this.dropdown.children),
+				length = items.length,
+				currentIndex = 0,
+				index = 0;
 
             if (direction === 0) {
                 currentIndex = activeLi === null ? length : items.indexOf(activeLi);
@@ -493,11 +479,11 @@
             }
 
             var liArray = this.dropdown.querySelectorAll('li');
-            for (let i = 0; i < liArray.length; i++) {
-                jsH.removeClass(liArray[i], 'active');
+            for (var i = 0; i < liArray.length; i++) {
+                this.jsH.removeClass(liArray[i], 'active');
             }
 
-            jsH.addClass(items[index], 'active');
+            this.jsH.addClass(items[index], 'active');
         },
 
         select: function (item) {
@@ -506,7 +492,6 @@
             this.editor.dom.remove(selection);
             this.editor.execCommand('mceInsertContent', false, this.insert(item));
         },
-
 
         insert: function (item) {
             return '<span>' + item[this.options.queryBy] + '</span>&nbsp;';
@@ -523,13 +508,13 @@
             }
 
             if (rollback) {
-                let text = this.query;
-                let selection = this.editor.dom.select('span#autocomplete')[0];
+                var text = this.query;
+                var selection = this.editor.dom.select('span#autocomplete')[0];
 
-                let p = document.createElement('p');
+                var p = document.createElement('p');
                 p.innerText = this.options.delimiter + text;
-                let replacement = p.firstChild;
-                let focus = jsH.offset(this.editor.selection.getNode()).top === (jsH.offset(selection).top + ((selection.offsetHeigh - window.getComputedStyle(selection).getPropertyValue("height")) / 2));
+                var replacement = p.firstChild;
+                var focus = this.jsH.offset(this.editor.selection.getNode()).top === (this.jsH.offset(selection).top + ((selection.offsetHeigh - window.getComputedStyle(selection).getPropertyValue("height")) / 2));
 
                 this.editor.dom.replace(replacement, selection);
 
@@ -541,22 +526,22 @@
         },
 
         offset: function () {
-            let rtePosition = jsH.offset(this.editor.getContainer()),
-                contentAreaPosition = jsH.position(this.editor.getContentAreaContainer()),
-                nodePosition = jsH.position(this.editor.dom.select('span#autocomplete')[0]),
-                scrollTop = jsH.isIE() ? this.editor.getDoc().documentElement.scrollTop : this.editor.getDoc().body.scrollTop;
+            var rtePosition = this.jsH.offset(this.editor.getContainer()),
+				contentAreaPosition = this.jsH.position(this.editor.getContentAreaContainer()),
+				nodePosition = this.jsH.position(this.editor.dom.select('span#autocomplete')[0]),
+				scrollTop = this.jsH.isIE() ? this.editor.getDoc().documentElement.scrollTop : this.editor.getDoc().body.scrollTop;
 
             return {
-                top: rtePosition.top + contentAreaPosition.top + nodePosition.top + jsH.innerHeight(this.editor.selection.getNode()) - scrollTop + 5,
+                top: rtePosition.top + contentAreaPosition.top + nodePosition.top + this.jsH.innerHeight(this.editor.selection.getNode()) - scrollTop + 5,
                 left: rtePosition.left + contentAreaPosition.left + nodePosition.left
             };
         },
 
         offsetInline: function () {
-            var nodePosition = jsH.offset(this.editor.dom.select('span#autocomplete')[0]);
+            var nodePosition = this.jsH.offset(this.editor.dom.select('span#autocomplete')[0]);
 
             return {
-                top: nodePosition.top + jsH.innerHeight(this.editor.selection.getNode()[0]) + 5, //TODO
+                top: nodePosition.top + this.jsH.innerHeight(this.editor.selection.getNode()) + 5, //TODO
                 left: nodePosition.left
             };
         }
@@ -568,16 +553,18 @@
         init: function (ed) {
 
             var autoComplete,
-                autoCompleteData = ed.getParam('mentions');
+				autoCompleteData = ed.getParam('mentions');
+
+            var jsH = new noJQuery();
 
             // If the delimiter is undefined set default value to ['@'].
             // If the delimiter is a string value convert it to an array. (backwards compatibility)
-            autoCompleteData.delimiter = (autoCompleteData.delimiter !== undefined) ? !jsH.isArray(autoCompleteData.delimiter) ? [autoCompleteData.delimiter] : autoCompleteData.delimiter : ['@'];
+            autoCompleteData.delimiter = (autoCompleteData.delimiter !== undefined) ? !Array.isArray(autoCompleteData.delimiter) ? [autoCompleteData.delimiter] : autoCompleteData.delimiter : ['@'];
 
             function prevCharIsSpace() {
                 var start = ed.selection.getRng(true).startOffset,
-                      text = ed.selection.getRng(true).startContainer.data || '',
-                      charachter = text.substr(start - 1, 1);
+					text = ed.selection.getRng(true).startContainer.data || '',
+					charachter = text.substr(start - 1, 1);
 
                 return (!!jsH.trim(charachter).length) ? false : true;
             }

@@ -4,6 +4,10 @@
     'use strict';
 
     var jsH = {
+        isIE: function () {
+            var uA = navigator.userAgent;
+            return (uA.indexOf('Trident') != -1 && uA.indexOf('rv:11') != -1) || (uA.indexOf('Trident') != -1 && uA.indexOf('MSIE') != -1);
+        },
         extend: function () {
             for (var i = 1; i < arguments.length; i++)
                 for (var key in arguments[i])
@@ -148,7 +152,6 @@
             });
         },
         closest: function (el, selector) {
-
             if (el.matches) {
                 while (el.matches && !el.matches(selector)) {
                     el = el.parentNode
@@ -540,10 +543,11 @@
         offset: function () {
             let rtePosition = jsH.offset(this.editor.getContainer()),
                 contentAreaPosition = jsH.position(this.editor.getContentAreaContainer()),
-                nodePosition = jsH.position(this.editor.dom.select('span#autocomplete')[0]);
+                nodePosition = jsH.position(this.editor.dom.select('span#autocomplete')[0]),
+                scrollTop = jsH.isIE() ? this.editor.getDoc().documentElement.scrollTop : this.editor.getDoc().body.scrollTop;
 
             return {
-                top: rtePosition.top + contentAreaPosition.top + nodePosition.top + jsH.innerHeight(this.editor.selection.getNode()) - this.editor.getDoc().body.scrollTop + 5,
+                top: rtePosition.top + contentAreaPosition.top + nodePosition.top + jsH.innerHeight(this.editor.selection.getNode()) - scrollTop + 5,
                 left: rtePosition.left + contentAreaPosition.left + nodePosition.left
             };
         },
